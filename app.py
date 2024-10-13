@@ -11,7 +11,7 @@ app = Flask(__name__)
 # MongoDB connection setup
 mongo_client = MongoClient(os.getenv('MONGODB_URI'))
 db = mongo_client['my_payment_db']
-payments_collection = db['payments']
+payments_collection = db['payment']
 
 # Function to store payments in MongoDB
 def store_payment(identifier_type, identifier_value, amount, timestamp):
