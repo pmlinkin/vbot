@@ -1,12 +1,12 @@
+version: 1
 services:
   - type: web
     name: payment-verification-service
     env: python
-    plan: free  # Change this if you need a higher plan
-    region: oregon  # Or select the region closest to your users
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python app.py"
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app  # Replace 'app' with your Flask app's filename without the .py extension
     envVars:
-      - key: MONGO_URI
-        value: 'mongodb+srv://aveshtrix:Golo%40123@cluster0.lyrkn.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
-    autoDeploy: true
+      - key: MONGODB_URI
+        value: 'mongodb+srv://aveshtrix:Golo%40123@cluster0.lyrkn.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'  # Use the correct MongoDB URI here
+    plan: free
+    runtime: python-3.8  # Specify your Python version
