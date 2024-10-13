@@ -2,12 +2,14 @@ import os
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 from pymongo import MongoClient
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env file
 
 app = Flask(__name__)
 
-# MongoDB connection setup using environment variables
-mongo_uri = os.getenv('MONGODB_URI')
-mongo_client = MongoClient(mongo_uri)
+# MongoDB connection setup using environment variable
+mongo_client = MongoClient(os.getenv('MONGODB_URI'))
 db = mongo_client['my_payment_db']
 payments_collection = db['payments']
 
@@ -63,38 +65,34 @@ def dialogflow_webhook():
         parameters = req.get('queryResult', {}).get('parameters', {})
         mobile_number = parameters.get('phone-number')
         email_id = parameters.get('email-id')
+        upi_ref_no = parameters.get('upi-ref-no')  # Added UPI Ref No
+        bank_ref_no = parameters.get('bank-ref-no')  # Added Bank Ref No
         utr_number = parameters.get('utr-number')
         transaction_id = parameters.get('transaction-id')
-        bank_ref_number = parameters.get('bank-ref-number')
-        upi_ref_number = parameters.get('upi-ref-number')
-        upi_transaction_id = parameters.get('upi-transaction-id')
-        payment_id = parameters.get('payment-id')
+        payment_id = parameters.get('payment-id')  # Added Payment ID
         order_id = parameters.get('order-id')
 
         current_time = datetime.now()
         time_limit = current_time - timedelta(days=7)
 
-        # Check for each identifier and verify payments accordingly
         if mobile_number:
             response_text = verify_payments('mobile_number', mobile_number, time_limit)
         elif email_id:
             response_text = verify_payments('email', email_id, time_limit)
+        elif upi_ref_no:
+            response_text = verify_payments('upi_ref_no', upi_ref_no, time_limit)
+        elif bank_ref_no:
+            response_text = verify_payments('bank_ref_no', bank_ref_no, time_limit)
         elif utr_number:
             response_text = verify_payments('utr', utr_number, time_limit)
         elif transaction_id:
             response_text = verify_payments('transaction_id', transaction_id, time_limit)
-        elif bank_ref_number:
-            response_text = verify_payments('bank_ref_number', bank_ref_number, time_limit)
-        elif upi_ref_number:
-            response_text = verify_payments('upi_ref_number', upi_ref_number, time_limit)
-        elif upi_transaction_id:
-            response_text = verify_payments('upi_transaction_id', upi_transaction_id, time_limit)
         elif payment_id:
             response_text = verify_payments('payment_id', payment_id, time_limit)
         elif order_id:
             response_text = verify_payments('order_id', order_id, time_limit)
         else:
-            response_text = "Please provide a valid identifier (mobile number, email, UTR, Transaction ID, Bank Ref No, UPI Ref No, UPI Transaction ID, Payment ID, or Order ID)."
+            response_text = "Please provide a valid identifier (mobile number, email, UPI Ref No, Bank Ref No, UTR, or order ID)."
 
     return jsonify({'fulfillmentText': response_text})
 
@@ -107,14 +105,13 @@ def razorpay_webhook():
         payment_entity = payload['payload']['payment']['entity']
         mobile_number = payment_entity.get('contact')
         email = payment_entity.get('email')
+        upi_ref_no = payment_entity.get('acquirer_data', {}).get('upi_ref_no')  # Added UPI Ref No
+        bank_ref_no = payment_entity.get('acquirer_data', {}).get('bank_ref_no')  # Added Bank Ref No
         utr = payment_entity.get('acquirer_data', {}).get('utr')
         transaction_id = payment_entity.get('id')
-        bank_ref_number = payment_entity.get('acquirer_data', {}).get('bank_ref_number')
-        upi_ref_number = payment_entity.get('acquirer_data', {}).get('upi_ref_number')
-        upi_transaction_id = payment_entity.get('acquirer_data', {}).get('upi_transaction_id')
-        payment_id = payment_entity.get('notes', {}).get('payment_id')
         order_id = payment_entity.get('order_id')
         amount = payment_entity.get('amount')  # In paise
+        invoice_number = payment_entity.get('notes', {}).get('invoice_number')
         timestamp = datetime.now()
 
         amount_in_rupees = amount / 100.0
@@ -123,21 +120,18 @@ def razorpay_webhook():
             store_payment('mobile_number', mobile_number, amount_in_rupees, timestamp)
         if email:
             store_payment('email', email, amount_in_rupees, timestamp)
+        if upi_ref_no:
+            store_payment('upi_ref_no', upi_ref_no, amount_in_rupees, timestamp)
+        if bank_ref_no:
+            store_payment('bank_ref_no', bank_ref_no, amount_in_rupees, timestamp)
         if utr:
             store_payment('utr', utr, amount_in_rupees, timestamp)
-        if transaction_id:
-            store_payment('transaction_id', transaction_id, amount_in_rupees, timestamp)
-        if bank_ref_number:
-            store_payment('bank_ref_number', bank_ref_number, amount_in_rupees, timestamp)
-        if upi_ref_number:
-            store_payment('upi_ref_number', upi_ref_number, amount_in_rupees, timestamp)
-        if upi_transaction_id:
-            store_payment('upi_transaction_id', upi_transaction_id, amount_in_rupees, timestamp)
-        if payment_id:
-            store_payment('payment_id', payment_id, amount_in_rupees, timestamp)
+        store_payment('transaction_id', transaction_id, amount_in_rupees, timestamp)
         if order_id:
             store_payment('order_id', order_id, amount_in_rupees, timestamp)
-
+        if invoice_number:
+            store_payment('invoice_number', invoice_number, amount_in_rupees, timestamp)
+        
         return jsonify({'status': 'success', 'message': 'Payment recorded'}), 200
 
     return jsonify({'status': 'ignored'}), 200
