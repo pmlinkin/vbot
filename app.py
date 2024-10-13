@@ -38,11 +38,11 @@ def verify_payments(identifier_type, identifier_value, time_limit):
         amount = payment_info['amount']
         # Check for each specific amount and add the corresponding link
         if amount == 15.0:
-            download_links.append('https://your-server.com/hindi-ebook.pdf')
+            download_links.append(os.getenv('HINDI_PDF_LINK'))
         elif amount == 16.0:
-            download_links.append('https://your-server.com/english-ebook.pdf')
+            download_links.append(os.getenv('ENGLISH_PDF_LINK'))
         elif amount == 100.0:
-            download_links.append('https://your-server.com/100-rupee-product.pdf')
+            download_links.append(os.getenv('PRODUCT_100_PDF_LINK'))
         else:
             download_links.append(f"https://your-server.com/products/{int(amount)}-product.pdf")
 
