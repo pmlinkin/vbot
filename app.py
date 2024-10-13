@@ -25,7 +25,6 @@ def store_payment(identifier_type, identifier_value, amount, timestamp):
 
 # Function to verify payments
 def verify_payments(identifier_type, identifier_value, time_limit):
-    """Verify payment based on various identifiers and amount logic, and send multiple products if applicable."""
     payments_info = payments_collection.find({
         'identifier_type': identifier_type,
         'identifier_value': identifier_value,
@@ -36,15 +35,15 @@ def verify_payments(identifier_type, identifier_value, time_limit):
     download_links = []
     for payment_info in payments_info:
         amount = payment_info['amount']
-        # Check for each specific amount and add the corresponding link
+        # Check for each specific amount and add the corresponding link from environment variables
         if amount == 15.0:
-            download_links.append(os.getenv('HINDI_PDF_LINK'))
+            download_links.append(os.getenv('HINDI_DOWNLOAD_LINK'))  # Hindi PDF download link
         elif amount == 16.0:
-            download_links.append(os.getenv('ENGLISH_PDF_LINK'))
+            download_links.append(os.getenv('ENGLISH_DOWNLOAD_LINK'))  # English PDF download link
         elif amount == 100.0:
-            download_links.append(os.getenv('PRODUCT_100_PDF_LINK'))
+            download_links.append(os.getenv('OTHER_DOWNLOAD_LINK'))  # Other product download link
         else:
-            download_links.append(f"https://your-server.com/products/{int(amount)}-product.pdf")
+            download_links.append("For other products, please contact us at [your contact link].")
 
     if download_links:
         return f"Thank you! Here are your download links: {', '.join(download_links)}"
@@ -57,9 +56,21 @@ def dialogflow_webhook():
     intent_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
     response_text = ""
 
-    if intent_name == 'Start Payment Intent':
-        payment_link = "https://razorpay.com/your-manually-generated-link"
-        response_text = f"Please complete your payment using this link: {payment_link}\nMake sure to enter your mobile number on the payment page."
+    if intent_name == 'Payment Inquiry Intent':
+        response_text = "What would you like? A Hindi PDF or an English PDF?"
+
+    elif intent_name == 'Select Product Intent':
+        parameters = req.get('queryResult', {}).get('parameters', {})
+        product_choice = parameters.get('product-choice')  # Capture user choice
+
+        if product_choice == 'Hindi':
+            payment_link = os.getenv('HINDI_PAYMENT_LINK')  # Link for Hindi PDF payment
+            response_text = f"To purchase the Hindi PDF, please complete your payment using this link: {payment_link}"
+        elif product_choice == 'English':
+            payment_link = os.getenv('ENGLISH_PAYMENT_LINK')  # Link for English PDF payment
+            response_text = f"To purchase the English PDF, please complete your payment using this link: {payment_link}"
+        else:
+            response_text = "For other products, please contact us at [your contact link]."
 
     elif intent_name == 'Verify Payment Intent':
         parameters = req.get('queryResult', {}).get('parameters', {})
