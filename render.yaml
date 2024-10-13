@@ -6,6 +6,3 @@ services:
     plan: free
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python app.py"
-    envVars:
-      - key: MONGODB_URI
-        value: 'mongodb+srv://aveshtrix:Golo%40123@cluster0.lyrkn.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
