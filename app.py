@@ -50,6 +50,11 @@ def verify_payments(identifier_type, identifier_value, time_limit):
     else:
         return "The payment is either too old or not found. Please try again."
 
+@app.route('/')
+def index():
+    return "Welcome to the Payment Verification System! This is the root page of the application."
+
+
 @app.route('/dialogflow-webhook', methods=['POST'])
 def dialogflow_webhook():
     req = request.get_json()
