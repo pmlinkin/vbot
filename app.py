@@ -43,7 +43,8 @@ def verify_payments(identifier_type, identifier_value, time_limit):
         elif amount == 100.0:
             download_links.append(os.getenv('OTHER_DOWNLOAD_LINK'))  # Other product download link
         else:
-            download_links.append("For other products, please contact us at [your contact link].")
+            contact_link = os.getenv('CONTACT_US_LINK')
+            download_links.append(f"For other products, please contact us at {contact_link}")
 
     if download_links:
         return f"Thank you! Here are your download links: {', '.join(download_links)}"
@@ -75,7 +76,8 @@ def dialogflow_webhook():
             payment_link = os.getenv('ENGLISH_PAYMENT_LINK')  # Link for English PDF payment
             response_text = f"To purchase the English PDF, please complete your payment using this link: {payment_link}"
         else:
-            response_text = "For other products, please contact us at [your contact link]."
+            contact_link = os.getenv('CONTACT_US_LINK')
+            response_text = f"For other products, please contact us at {contact_link}"
 
     elif intent_name == 'Verify Payment Intent':
         parameters = req.get('queryResult', {}).get('parameters', {})
