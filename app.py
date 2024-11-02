@@ -53,17 +53,20 @@ def verify_payments(identifier_type, identifier_value, time_limit):
         return "The payment is either too old or not found. Please try again."
 
 # Function to send a message to Telegram
-def send_message_to_telegram(user_name, chat_id, user_message, bot_response, intent_name):
+def send_message_to_telegram(user_name, chat_id, user_message, bot_response, intent_name, timestamp):
     TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
     TELEGRAM_GROUP_CHAT_ID = os.getenv('TELEGRAM_GROUP_CHAT_ID')
 
+    # Format the username as a clickable link
+    clickable_user_name = f"[{user_name}](tg://user?id={chat_id})"
+
     # Prepare the message
     message = (
-        f"User: {user_name} (Chat ID: {chat_id})\n"
+        f"User: {clickable_user_name} (Chat ID: {chat_id})\n"
         f"Intent: {intent_name}\n"
         f"User Message: {user_message}\n"
         f"Bot Response: {bot_response}\n"
-        f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"  # Add timestamp for clarity
+        f"Timestamp: {timestamp}\n"
     )
 
     # Send the message to Telegram
@@ -87,8 +90,11 @@ def dialogflow_webhook():
 
     # Get the user message for monitoring
     user_message = req.get('queryResult', {}).get('queryText')
-    user_name = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('data', {}).get('from', {}).get('first_name', 'Unknown')
-    chat_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('data', {}).get('chat', {}).get('id', 'N/A')
+    user_name = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('user', {}).get('first_name', 'Unknown')
+    chat_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('user', {}).get('id', 'N/A')
+    
+    # Get the current timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     if intent_name == 'Payment Inquiry Intent':
         response_text = "What would you like? A Hindi PDF or an English PDF?"
@@ -139,7 +145,7 @@ def dialogflow_webhook():
             response_text = "Please provide a valid identifier (mobile number, email, UTR, transaction ID, bank ref, UPI ref, UPI transaction ID, or order ID)."
 
     # Send user message and bot response to Telegram for monitoring
-    send_message_to_telegram(user_name, chat_id, user_message, response_text, intent_name)
+    send_message_to_telegram(user_name, chat_id, user_message, response_text, intent_name, timestamp)
 
     return jsonify({'fulfillmentText': response_text})
 
