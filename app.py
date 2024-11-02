@@ -4,9 +4,13 @@ from pymongo import MongoClient
 import os
 from dotenv import load_dotenv
 import requests
-import logging
+import logging  # Import logging
 
-load_dotenv()  # Load environment variables from .env file
+load_dotenv()
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logger = logging.getLogger()
 
 app = Flask(__name__)
 
@@ -14,7 +18,6 @@ app = Flask(__name__)
 mongo_client = MongoClient(os.getenv('MONGODB_URI'))
 db = mongo_client['my_payment_db']
 payments_collection = db['payment']
-conversations_collection = db['conversations']  # Collection for conversations
 
 # Function to store payments in MongoDB
 def store_payment(identifier_type, identifier_value, amount, timestamp):
@@ -38,13 +41,12 @@ def verify_payments(identifier_type, identifier_value, time_limit):
     download_links = []
     for payment_info in payments_info:
         amount = payment_info['amount']
-        # Check for each specific amount and add the corresponding link from environment variables
         if amount == 15.0:
-            download_links.append(os.getenv('HINDI_DOWNLOAD_LINK'))  # Hindi PDF download link
+            download_links.append(os.getenv('HINDI_DOWNLOAD_LINK'))
         elif amount == 16.0:
-            download_links.append(os.getenv('ENGLISH_DOWNLOAD_LINK'))  # English PDF download link
+            download_links.append(os.getenv('ENGLISH_DOWNLOAD_LINK'))
         elif amount == 100.0:
-            download_links.append(os.getenv('OTHER_DOWNLOAD_LINK'))  # Other product download link
+            download_links.append(os.getenv('OTHER_DOWNLOAD_LINK'))
         else:
             contact_link = os.getenv('CONTACT_US_LINK')
             download_links.append(f"For other products, please contact us at {contact_link}")
@@ -55,29 +57,16 @@ def verify_payments(identifier_type, identifier_value, time_limit):
         return "The payment is either too old or not found. Please try again."
 
 # Function to send a message to Telegram
-def send_message_to_telegram(user_message, bot_response):
+def send_message_to_telegram(text):
     TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
     TELEGRAM_GROUP_CHAT_ID = os.getenv('TELEGRAM_GROUP_CHAT_ID')
-
+    
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         'chat_id': TELEGRAM_GROUP_CHAT_ID,
-        'text': f"User: {user_message}\nBot: {bot_response}"
+        'text': text
     }
     requests.post(url, json=payload)
-
-# Function to store conversations in MongoDB
-def store_conversation(user_message, bot_response, user_id):
-    try:
-        conversations_collection.insert_one({
-            'user_id': user_id,
-            'user_message': user_message,
-            'bot_response': bot_response,
-            'timestamp': datetime.now()
-        })
-        logging.info("Conversation stored successfully.")
-    except Exception as e:
-        logging.error(f"Error storing conversation: {e}")
 
 @app.route('/')
 def index():
@@ -89,9 +78,8 @@ def dialogflow_webhook():
     intent_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
     response_text = ""
 
-    # Get the user message and user ID for monitoring
     user_message = req.get('queryResult', {}).get('queryText')
-    user_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('userId')  # Assuming you have a user ID
+    logger.info(f"User Message: {user_message}")  # Log user message
 
     if intent_name == 'Payment Inquiry Intent':
         response_text = "What would you like? A Hindi PDF or an English PDF?"
@@ -100,10 +88,10 @@ def dialogflow_webhook():
         product_choice = parameters.get('product-choice')
 
         if product_choice == 'Hindi':
-            payment_link = os.getenv('HINDI_PAYMENT_LINK')  # Link for Hindi PDF payment
+            payment_link = os.getenv('HINDI_PAYMENT_LINK')
             response_text = f"To purchase the Hindi PDF, please complete your payment using this link: {payment_link}"
         elif product_choice == 'English':
-            payment_link = os.getenv('ENGLISH_PAYMENT_LINK')  # Link for English PDF payment
+            payment_link = os.getenv('ENGLISH_PAYMENT_LINK')
             response_text = f"To purchase the English PDF, please complete your payment using this link: {payment_link}"
         else:
             contact_link = os.getenv('CONTACT_US_LINK')
@@ -141,11 +129,11 @@ def dialogflow_webhook():
         else:
             response_text = "Please provide a valid identifier (mobile number, email, UTR, transaction ID, bank ref, UPI ref, UPI transaction ID, or order ID)."
 
-    # Store conversation in MongoDB
-    store_conversation(user_message, response_text, user_id)
+    logger.info(f"Bot Response: {response_text}")  # Log bot response
 
-    # Send user message and bot response to Telegram for monitoring
-    send_message_to_telegram(user_message, response_text)
+    # Send messages to Telegram for monitoring
+    send_message_to_telegram(f"User: {user_message}")
+    send_message_to_telegram(f"Bot: {response_text}")
 
     return jsonify({'fulfillmentText': response_text})
 
@@ -164,7 +152,7 @@ def razorpay_webhook():
         bank_ref_number = payment_entity.get('acquirer_data', {}).get('bank_ref_no')
         upi_ref_number = payment_entity.get('acquirer_data', {}).get('upi_ref_no')
         upi_transaction_id = payment_entity.get('acquirer_data', {}).get('upi_transaction_id')
-        amount = payment_entity.get('amount')  # In paise
+        amount = payment_entity.get('amount')
         timestamp = datetime.now()
 
         amount_in_rupees = amount / 100.0
@@ -184,6 +172,9 @@ def razorpay_webhook():
             store_payment('upi_ref', upi_ref_number, amount_in_rupees, timestamp)
         if upi_transaction_id:
             store_payment('upi_transaction_id', upi_transaction_id, amount_in_rupees, timestamp)
+
+        logger.info(f"Payment Recorded: {payment_entity}")  # Log payment information
+        send_message_to_telegram(f"Payment Recorded: {payment_entity}")  # Send to Telegram
 
         return jsonify({'status': 'success', 'message': 'Payment recorded'}), 200
 
