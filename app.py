@@ -52,15 +52,23 @@ def verify_payments(identifier_type, identifier_value, time_limit):
     else:
         return "The payment is either too old or not found. Please try again."
 
-# Function to send a message to Telegram
-def send_message_to_telegram(text):
+# Function to send a concise message to Telegram
+def send_message_to_telegram(user_message, bot_response, chat_id, user_name):
     TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
     TELEGRAM_GROUP_CHAT_ID = os.getenv('TELEGRAM_GROUP_CHAT_ID')
+    
+    # Format the message to be more concise and include user details
+    short_message = (
+        f"Chat ID: {chat_id}\n"
+        f"User Name: {user_name}\n"
+        f"User: {user_message}\n"
+        f"Bot: {bot_response}"
+    )
     
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         'chat_id': TELEGRAM_GROUP_CHAT_ID,
-        'text': text
+        'text': short_message
     }
     requests.post(url, json=payload)
 
@@ -76,6 +84,10 @@ def dialogflow_webhook():
 
     # Get the user message for monitoring
     user_message = req.get('queryResult', {}).get('queryText')
+    
+    # Assuming the chat ID and user name are passed in the request; adjust based on your implementation
+    chat_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('chat_id', 'N/A')
+    user_name = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('user_name', 'N/A')
 
     if intent_name == 'Payment Inquiry Intent':
         response_text = "What would you like? A Hindi PDF or an English PDF?"
@@ -126,8 +138,7 @@ def dialogflow_webhook():
             response_text = "Please provide a valid identifier (mobile number, email, UTR, transaction ID, bank ref, UPI ref, UPI transaction ID, or order ID)."
 
     # Send user message and bot response to Telegram for monitoring
-    send_message_to_telegram(f"User: {user_message}")
-    send_message_to_telegram(f"Bot: {response_text}")
+    send_message_to_telegram(user_message, response_text, chat_id, user_name)
 
     return jsonify({'fulfillmentText': response_text})
 
