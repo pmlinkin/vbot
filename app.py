@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from pymongo import MongoClient
 import os
 from dotenv import load_dotenv
+import requests  # Import requests to send messages to Telegram
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -51,10 +52,21 @@ def verify_payments(identifier_type, identifier_value, time_limit):
     else:
         return "The payment is either too old or not found. Please try again."
 
+# Function to send a message to Telegram
+def send_message_to_telegram(text):
+    TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+    TELEGRAM_GROUP_CHAT_ID = os.getenv('TELEGRAM_GROUP_CHAT_ID')
+    
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        'chat_id': TELEGRAM_GROUP_CHAT_ID,
+        'text': text
+    }
+    requests.post(url, json=payload)
+
 @app.route('/')
 def index():
     return "Welcome to the Payment Verification System! This is the root page of the application."
-
 
 @app.route('/dialogflow-webhook', methods=['POST'])
 def dialogflow_webhook():
@@ -62,12 +74,14 @@ def dialogflow_webhook():
     intent_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
     response_text = ""
 
+    # Get the user message for monitoring
+    user_message = req.get('queryResult', {}).get('queryText')
+
     if intent_name == 'Payment Inquiry Intent':
         response_text = "What would you like? A Hindi PDF or an English PDF?"
-
     elif intent_name == 'Select Product Intent':
         parameters = req.get('queryResult', {}).get('parameters', {})
-        product_choice = parameters.get('product-choice')  # Capture user choice
+        product_choice = parameters.get('product-choice')
 
         if product_choice == 'Hindi':
             payment_link = os.getenv('HINDI_PAYMENT_LINK')  # Link for Hindi PDF payment
@@ -78,7 +92,6 @@ def dialogflow_webhook():
         else:
             contact_link = os.getenv('CONTACT_US_LINK')
             response_text = f"For other products, please contact us at {contact_link}"
-
     elif intent_name == 'Verify Payment Intent':
         parameters = req.get('queryResult', {}).get('parameters', {})
         mobile_number = parameters.get('phone-number')
@@ -111,6 +124,10 @@ def dialogflow_webhook():
             response_text = verify_payments('order_id', order_id, time_limit)
         else:
             response_text = "Please provide a valid identifier (mobile number, email, UTR, transaction ID, bank ref, UPI ref, UPI transaction ID, or order ID)."
+
+    # Send user message and bot response to Telegram for monitoring
+    send_message_to_telegram(f"User: {user_message}")
+    send_message_to_telegram(f"Bot: {response_text}")
 
     return jsonify({'fulfillmentText': response_text})
 
