@@ -3,7 +3,8 @@ from datetime import datetime, timedelta
 from pymongo import MongoClient
 import os
 from dotenv import load_dotenv
-import requests  # Import requests to send messages to Telegram
+import requests
+import logging
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -13,6 +14,7 @@ app = Flask(__name__)
 mongo_client = MongoClient(os.getenv('MONGODB_URI'))
 db = mongo_client['my_payment_db']
 payments_collection = db['payment']
+conversations_collection = db['conversations']  # Collection for conversations
 
 # Function to store payments in MongoDB
 def store_payment(identifier_type, identifier_value, amount, timestamp):
@@ -53,16 +55,29 @@ def verify_payments(identifier_type, identifier_value, time_limit):
         return "The payment is either too old or not found. Please try again."
 
 # Function to send a message to Telegram
-def send_message_to_telegram(text):
+def send_message_to_telegram(user_message, bot_response):
     TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
     TELEGRAM_GROUP_CHAT_ID = os.getenv('TELEGRAM_GROUP_CHAT_ID')
-    
+
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         'chat_id': TELEGRAM_GROUP_CHAT_ID,
-        'text': text
+        'text': f"User: {user_message}\nBot: {bot_response}"
     }
     requests.post(url, json=payload)
+
+# Function to store conversations in MongoDB
+def store_conversation(user_message, bot_response, user_id):
+    try:
+        conversations_collection.insert_one({
+            'user_id': user_id,
+            'user_message': user_message,
+            'bot_response': bot_response,
+            'timestamp': datetime.now()
+        })
+        logging.info("Conversation stored successfully.")
+    except Exception as e:
+        logging.error(f"Error storing conversation: {e}")
 
 @app.route('/')
 def index():
@@ -74,8 +89,9 @@ def dialogflow_webhook():
     intent_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
     response_text = ""
 
-    # Get the user message for monitoring
+    # Get the user message and user ID for monitoring
     user_message = req.get('queryResult', {}).get('queryText')
+    user_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('userId')  # Assuming you have a user ID
 
     if intent_name == 'Payment Inquiry Intent':
         response_text = "What would you like? A Hindi PDF or an English PDF?"
@@ -125,9 +141,11 @@ def dialogflow_webhook():
         else:
             response_text = "Please provide a valid identifier (mobile number, email, UTR, transaction ID, bank ref, UPI ref, UPI transaction ID, or order ID)."
 
+    # Store conversation in MongoDB
+    store_conversation(user_message, response_text, user_id)
+
     # Send user message and bot response to Telegram for monitoring
-    send_message_to_telegram(f"User: {user_message}")
-    send_message_to_telegram(f"Bot: {response_text}")
+    send_message_to_telegram(user_message, response_text)
 
     return jsonify({'fulfillmentText': response_text})
 
