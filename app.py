@@ -3,9 +3,9 @@ from datetime import datetime, timedelta
 from pymongo import MongoClient
 import os
 from dotenv import load_dotenv
-import requests  # Import requests to send messages to Telegram
+import requests
 
-load_dotenv()  # Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -36,47 +36,30 @@ def verify_payments(identifier_type, identifier_value, time_limit):
     download_links = []
     for payment_info in payments_info:
         amount = payment_info['amount']
-        # Check for each specific amount and add the corresponding link from environment variables
+        # Add logic to return download links based on amount
         if amount == 15.0:
-            download_links.append(os.getenv('HINDI_DOWNLOAD_LINK'))  # Hindi PDF download link
+            download_links.append(os.getenv('HINDI_DOWNLOAD_LINK'))
         elif amount == 16.0:
-            download_links.append(os.getenv('ENGLISH_DOWNLOAD_LINK'))  # English PDF download link
+            download_links.append(os.getenv('ENGLISH_DOWNLOAD_LINK'))
         elif amount == 100.0:
-            download_links.append(os.getenv('OTHER_DOWNLOAD_LINK'))  # Other product download link
-        else:
-            contact_link = os.getenv('CONTACT_US_LINK')
-            download_links.append(f"For other products, please contact us at {contact_link}")
-
+            download_links.append(os.getenv('OTHER_DOWNLOAD_LINK'))
+    
     if download_links:
         return f"Thank you! Here are your download links: {', '.join(download_links)}"
     else:
         return "The payment is either too old or not found. Please try again."
 
 # Function to send a message to Telegram
-def send_message_to_telegram(user_name, chat_id, user_message, bot_response, intent_name, timestamp):
+def send_message_to_telegram(message):
     TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
     TELEGRAM_GROUP_CHAT_ID = os.getenv('TELEGRAM_GROUP_CHAT_ID')
 
-    # Format the username as a clickable link
-    clickable_user_name = f"[{user_name}](tg://user?id={chat_id})"
-
-    # Prepare the message
-    message = (
-        f"User: {clickable_user_name} (Chat ID: {chat_id})\n"
-        f"Intent: {intent_name}\n"
-        f"User Message: {user_message}\n"
-        f"Bot Response: {bot_response}\n"
-        f"Timestamp: {timestamp}\n"
-    )
-
-    # Send the message to Telegram
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         'chat_id': TELEGRAM_GROUP_CHAT_ID,
         'text': message,
-        'parse_mode': 'Markdown'  # Optional: Format text as Markdown
+        'parse_mode': 'Markdown'  # Use Markdown for clickable usernames
     }
-    requests.post(url, json=payload)
+    requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json=payload)
 
 @app.route('/')
 def index():
@@ -85,32 +68,37 @@ def index():
 @app.route('/dialogflow-webhook', methods=['POST'])
 def dialogflow_webhook():
     req = request.get_json()
+    
+    # Get the necessary information from the request
     intent_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
-    response_text = ""
-
-    # Get the user message for monitoring
     user_message = req.get('queryResult', {}).get('queryText')
     user_name = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('user', {}).get('first_name', 'Unknown')
     chat_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('user', {}).get('id', 'N/A')
     
     # Get the current timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Prepare the message for the Telegram group
+    user_display_name = f"[{user_name}](tg://user?id={chat_id})"
+    telegram_message = f"User: {user_display_name} (Chat ID: {chat_id})\n" \
+                       f"User Message: {user_message}\n"
 
+    # Process different intents
     if intent_name == 'Payment Inquiry Intent':
-        response_text = "What would you like? A Hindi PDF or an English PDF?"
+        bot_response = "What can I help you with?"
     elif intent_name == 'Select Product Intent':
         parameters = req.get('queryResult', {}).get('parameters', {})
         product_choice = parameters.get('product-choice')
 
         if product_choice == 'Hindi':
-            payment_link = os.getenv('HINDI_PAYMENT_LINK')  # Link for Hindi PDF payment
-            response_text = f"To purchase the Hindi PDF, please complete your payment using this link: {payment_link}"
+            payment_link = os.getenv('HINDI_PAYMENT_LINK')
+            bot_response = f"To purchase the Hindi PDF, please complete your payment using this link: {payment_link}"
         elif product_choice == 'English':
-            payment_link = os.getenv('ENGLISH_PAYMENT_LINK')  # Link for English PDF payment
-            response_text = f"To purchase the English PDF, please complete your payment using this link: {payment_link}"
+            payment_link = os.getenv('ENGLISH_PAYMENT_LINK')
+            bot_response = f"To purchase the English PDF, please complete your payment using this link: {payment_link}"
         else:
             contact_link = os.getenv('CONTACT_US_LINK')
-            response_text = f"For other products, please contact us at {contact_link}"
+            bot_response = f"For other products, please contact us at {contact_link}"
     elif intent_name == 'Verify Payment Intent':
         parameters = req.get('queryResult', {}).get('parameters', {})
         mobile_number = parameters.get('phone-number')
@@ -126,28 +114,33 @@ def dialogflow_webhook():
         time_limit = current_time - timedelta(days=7)
 
         if mobile_number:
-            response_text = verify_payments('mobile_number', mobile_number, time_limit)
+            bot_response = verify_payments('mobile_number', mobile_number, time_limit)
         elif email_id:
-            response_text = verify_payments('email', email_id, time_limit)
+            bot_response = verify_payments('email', email_id, time_limit)
         elif utr_number:
-            response_text = verify_payments('utr', utr_number, time_limit)
+            bot_response = verify_payments('utr', utr_number, time_limit)
         elif transaction_id:
-            response_text = verify_payments('transaction_id', transaction_id, time_limit)
+            bot_response = verify_payments('transaction_id', transaction_id, time_limit)
         elif bank_ref_number:
-            response_text = verify_payments('bank_ref', bank_ref_number, time_limit)
+            bot_response = verify_payments('bank_ref', bank_ref_number, time_limit)
         elif upi_ref_number:
-            response_text = verify_payments('upi_ref', upi_ref_number, time_limit)
+            bot_response = verify_payments('upi_ref', upi_ref_number, time_limit)
         elif upi_transaction_id:
-            response_text = verify_payments('upi_transaction_id', upi_transaction_id, time_limit)
+            bot_response = verify_payments('upi_transaction_id', upi_transaction_id, time_limit)
         elif order_id:
-            response_text = verify_payments('order_id', order_id, time_limit)
+            bot_response = verify_payments('order_id', order_id, time_limit)
         else:
-            response_text = "Please provide a valid identifier (mobile number, email, UTR, transaction ID, bank ref, UPI ref, UPI transaction ID, or order ID)."
+            bot_response = "Please provide a valid identifier (mobile number, email, UTR, transaction ID, bank ref, UPI ref, UPI transaction ID, or order ID)."
+    else:
+        bot_response = "I'm sorry, I didn't understand that."
 
-    # Send user message and bot response to Telegram for monitoring
-    send_message_to_telegram(user_name, chat_id, user_message, response_text, intent_name, timestamp)
+    # Add bot response to the message for Telegram
+    telegram_message += f"Bot Response: {bot_response}\nTimestamp: {timestamp}\n"
 
-    return jsonify({'fulfillmentText': response_text})
+    # Send the message to Telegram
+    send_message_to_telegram(telegram_message)
+
+    return jsonify({'fulfillmentText': bot_response})
 
 @app.route('/razorpay-webhook', methods=['POST'])
 def razorpay_webhook():
@@ -164,7 +157,7 @@ def razorpay_webhook():
         bank_ref_number = payment_entity.get('acquirer_data', {}).get('bank_ref_no')
         upi_ref_number = payment_entity.get('acquirer_data', {}).get('upi_ref_no')
         upi_transaction_id = payment_entity.get('acquirer_data', {}).get('upi_transaction_id')
-        amount = payment_entity.get('amount')  # In paise
+        amount = payment_entity.get('amount')
         timestamp = datetime.now()
 
         amount_in_rupees = amount / 100.0
